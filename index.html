@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Premier Lot Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f5f3;
+    --bg3: #eeede8;
+    --text: #1a1a1a;
+    --text2: #6b6b6b;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --green: #0f6e56;
+    --green-bg: #e1f5ee;
+    --red: #a32d2d;
+    --red-bg: #fcebeb;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1c;
+      --bg2: #262626;
+      --bg3: #2f2f2f;
+      --text: #f0f0f0;
+      --text2: #9a9a9a;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.2);
+      --green-bg: #0a3328;
+      --red-bg: #3a1515;
+    }
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg3);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 1rem;
+  }
+  .container { max-width: 680px; margin: 0 auto; }
+  header { margin-bottom: 1.25rem; }
+  header h1 { font-size: 20px; font-weight: 600; margin-bottom: 3px; }
+  .status-line { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #888; flex-shrink: 0; }
+  .dot.live { background: #1d9e75; }
+  .dot.err { background: #e24b4a; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+  .stat { background: var(--bg); border-radius: var(--radius); padding: 14px 16px; }
+  .stat-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-val { font-size: 24px; font-weight: 600; }
+
+  .card { background: var(--bg); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1rem; border: 0.5px solid var(--border); }
+  .card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .875rem; }
+
+  .entry-row { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1; height: 40px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    background: var(--bg2); color: var(--text); font-size: 15px; padding: 0 12px;
+    outline: none; letter-spacing: .04em;
+  }
+  input[type="text"]:focus { border-color: var(--green); }
+  input[type="text"]::placeholder { letter-spacing: 0; color: var(--text2); }
+
+  .btn { cursor: pointer; border-radius: var(--radius); font-size: 14px; font-weight: 500; border: none; transition: opacity .15s; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--text); color: var(--bg); height: 40px; padding: 0 18px; }
+  .btn-primary:hover:not(:disabled) { opacity: .85; }
+  .btn-sm { background: transparent; border: 0.5px solid var(--border2); color: var(--text); height: 30px; padding: 0 12px; font-size: 12px; }
+  .btn-sm:hover { background: var(--bg2); }
+  .btn-exit { border-color: var(--green); color: var(--green); }
+  .btn-remove { color: var(--text2); }
+
+  .lot-list { display: flex; flex-direction: column; gap: 8px; }
+  .lot-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg2); border-radius: var(--radius); padding: 10px 12px;
+  }
+  .plate { font-size: 16px; font-weight: 600; letter-spacing: .07em; min-width: 95px; }
+  .elapsed { font-size: 12px; color: var(--text2); flex: 1; }
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: var(--radius); background: var(--green-bg); color: var(--green); font-weight: 600; white-space: nowrap; }
+  .btn-group { display: flex; gap: 6px; }
+
+  .log-head {
+    display: grid; grid-template-columns: 105px 1fr 85px 52px;
+    gap: 8px; padding: 0 10px 8px;
+    font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .log-list { display: flex; flex-direction: column; max-height: 280px; overflow-y: auto; }
+  .log-item {
+    display: grid; grid-template-columns: 105px 1fr 85px 52px;
+    gap: 8px; align-items: center; padding: 9px 10px; font-size: 13px;
+    border-top: 0.5px solid var(--border);
+  }
+  .log-item:first-child { border-top: none; }
+
+  .empty { font-size: 13px; color: var(--text2); text-align: center; padding: 1rem 0; }
+  .export-row { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+  .err-banner {
+    background: var(--red-bg); border: 0.5px solid #f09595; border-radius: var(--radius);
+    padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: 1rem;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.45); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem;
+    width: 310px; max-width: calc(100vw - 2rem);
+    border: 0.5px solid var(--border2);
+  }
+  .modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+  .modal-plate { font-size: 24px; font-weight: 700; letter-spacing: .08em; margin: 10px 0 6px; }
+  .modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 14px; }
+  .trip-opts { display: flex; flex-direction: column; gap: 7px; margin-bottom: 1.25rem; }
+  .trip-opt {
+    padding: 10px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    cursor: pointer; font-size: 14px; transition: background .1s;
+  }
+  .trip-opt:hover { background: var(--bg2); }
+  .trip-opt.sel { background: var(--bg2); border-color: var(--green); font-weight: 600; }
+  .trip-opt.muted { color: var(--text2); }
+  .modal-actions { display: flex; gap: 8px; }
+  .btn-confirm { background: var(--green); color: #fff; height: 40px; padding: 0 18px; flex: 1; font-size: 14px; font-weight: 500; border-radius: var(--radius); border: none; cursor: pointer; }
+  .btn-confirm:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-cancel { background: transparent; border: 0.5px solid var(--border2); color: var(--text); height: 40px; padding: 0 14px; border-radius: var(--radius); font-size: 14px; cursor: pointer; }
+
+  @media (max-width: 480px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .stat-val { font-size: 20px; }
+    .lot-item { flex-wrap: wrap; }
+    .elapsed { width: 100%; order: 3; }
+    .log-head, .log-item { grid-template-columns: 90px 1fr 75px 45px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Uber Premier — Lot Monitor</h1>
+    <div class="status-line">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <div id="errBanner" class="err-banner" style="display:none"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">In lot now</div><div class="stat-val" id="cntLot">—</div></div>
+    <div class="stat"><div class="stat-label">Trips today</div><div class="stat-val" id="cntTrips">—</div></div>
+    <div class="stat"><div class="stat-label">Avg wait</div><div class="stat-val" id="avgWait">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Log vehicle entry</div>
+    <div class="entry-row">
+      <input id="plateInput" type="text" placeholder="License plate" maxlength="10"
+        oninput="this.value=this.value.toUpperCase()"
+        onkeydown="if(event.key==='Enter')logEntry()" />
+      <button class="btn btn-primary" id="entryBtn" onclick="logEntry()">Log entry</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Currently in lot</div>
+    <div class="lot-list" id="lotList"><div class="empty">Loading...</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Completed trip log</div>
+    <div class="log-head">
+      <span>Plate</span><span>Trip type</span><span>Exit time</span><span>Wait</span>
+    </div>
+    <div class="log-list" id="logList"><div class="empty">Loading...</div></div>
+    <div class="export-row">
+      <button class="btn btn-sm" onclick="exportCSV()">Export CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- Exit Modal -->
+<div class="modal-overlay" id="exitModal">
+  <div class="modal">
+    <h3>Log exit</h3>
+    <div class="modal-plate" id="modalPlate">—</div>
+    <div class="modal-sub">Select trip type dispatched:</div>
+    <div class="trip-opts" id="tripOpts"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-confirm" id="confirmBtn" onclick="confirmExit()">Confirm exit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://icohyfoyedgbqxumataj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imljb2h5Zm95ZWRnYnF4dW1hdGFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzQ4MTcsImV4cCI6MjA5MTI1MDgxN30.3qG3oEsg687uZ9ZVL-g5xeqNl4XTQeQhe55Wz2fjqmk';
+const TRIP_TYPES = ['Uber Premier','Uber XL','Uber Comfort','UberX','Not dispatched'];
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let inLot = [], completed = [], exitTarget = null, selectedTrip = TRIP_TYPES[0], busy = false;
+
+function setStatus(state, msg) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'dot' + (state==='live' ? ' live' : state==='err' ? ' err' : '');
+  document.getElementById('statusText').textContent = msg;
+}
+
+function showErr(msg) {
+  const b = document.getElementById('errBanner');
+  b.textContent = msg; b.style.display = 'block';
+  setTimeout(() => b.style.display = 'none', 6000);
+}
+
+function fmt(ts) {
+  return ts ? new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : '—';
+}
+function fmtShort(ts) {
+  return ts ? new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
+}
+
+async function fetchData() {
+  const { data, error } = await db.from('lot_log').select('*').order('entry_ts', {ascending: true});
+  if (error) { showErr('Load error: ' + error.message); setStatus('err', 'Load failed'); return; }
+  inLot = data.filter(r => r.status === 'in_lot');
+  completed = data.filter(r => r.status === 'exited').reverse();
+  render();
+}
+
+async function logEntry() {
+  const inp = document.getElementById('plateInput');
+  const plate = inp.value.trim().toUpperCase();
+  if (!plate) return;
+  if (inLot.find(v => v.plate === plate)) { showErr(plate + ' is already logged in the lot.'); return; }
+  const btn = document.getElementById('entryBtn');
+  btn.disabled = true;
+  const { error } = await db.from('lot_log').insert([{
+    plate,
+    status: 'in_lot',
+    entry_ts: new Date().toISOString()
+  }]);
+  btn.disabled = false;
+  if (error) { showErr('Entry failed: ' + error.message); return; }
+  inp.value = '';
+  await fetchData();
+}
+
+function openExit(id) {
+  exitTarget = id;
+  selectedTrip = TRIP_TYPES[0];
+  const entry = inLot.find(v => v.id === id);
+  document.getElementById('modalPlate').textContent = entry ? entry.plate : '—';
+  renderTripOpts();
+  document.getElementById('exitModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('exitModal').classList.remove('open');
+  exitTarget = null;
+}
+
+function renderTripOpts() {
+  document.getElementById('tripOpts').innerHTML = TRIP_TYPES.map(t =>
+    `<div class="trip-opt${t===selectedTrip?' sel':''}${t==='Not dispatched'?' muted':''}"
+      onclick="selectTrip('${t}')">${t}</div>`
+  ).join('');
+}
+
+function selectTrip(t) { selectedTrip = t; renderTripOpts(); }
+
+async function confirmExit() {
+  if (!exitTarget || busy) return;
+  busy = true;
+  document.getElementById('confirmBtn').disabled = true;
+  const entry = inLot.find(v => v.id === exitTarget);
+  if (!entry) { closeModal(); busy = false; return; }
+  const exitTs = new Date();
+  const waitMins = Math.round((exitTs - new Date(entry.entry_ts)) / 60000);
+  const { error } = await db.from('lot_log').update({
+    status: 'exited',
+    trip_type: selectedTrip,
+    exit_ts: exitTs.toISOString(),
+    wait_minutes: waitMins
+  }).eq('id', exitTarget);
+  busy = false;
+  document.getElementById('confirmBtn').disabled = false;
+  if (error) { showErr('Exit failed: ' + error.message); return; }
+  closeModal();
+  await fetchData();
+}
+
+async function removeEntry(id) {
+  if (!confirm('Remove this vehicle without logging a trip?')) return;
+  const { error } = await db.from('lot_log').delete().eq('id', id);
+  if (error) { showErr('Remove failed: ' + error.message); return; }
+  await fetchData();
+}
+
+function render() {
+  document.getElementById('cntLot').textContent = inLot.length;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayTrips = completed.filter(c => new Date(c.exit_ts) >= today);
+  document.getElementById('cntTrips').textContent = todayTrips.length;
+  if (todayTrips.length) {
+    const avg = todayTrips.reduce((s,c) => s + (c.wait_minutes||0), 0) / todayTrips.length;
+    document.getElementById('avgWait').textContent = Math.round(avg) + 'm';
+  } else {
+    document.getElementById('avgWait').textContent = '—';
+  }
+
+  const ll = document.getElementById('lotList');
+  ll.innerHTML = inLot.length
+    ? inLot.map(v => `
+        <div class="lot-item">
+          <span class="plate">${v.plate}</span>
+          <span class="elapsed">In since ${fmt(v.entry_ts)}</span>
+          <span class="badge">Premier</span>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-exit" onclick="openExit('${v.id}')">Log exit</button>
+            <button class="btn btn-sm btn-remove" onclick="removeEntry('${v.id}')">Remove</button>
+          </div>
+        </div>`).join('')
+    : '<div class="empty">No vehicles currently logged</div>';
+
+  const lg = document.getElementById('logList');
+  lg.innerHTML = completed.length
+    ? completed.slice(0,100).map(c => `
+        <div class="log-item">
+          <span style="font-weight:600">${c.plate}</span>
+          <span>${c.trip_type||'—'}</span>
+          <span style="color:var(--text2)">${fmtShort(c.exit_ts)}</span>
+          <span>${c.wait_minutes != null ? c.wait_minutes+'m' : '—'}</span>
+        </div>`).join('')
+    : '<div class="empty">No completed trips yet</div>';
+}
+
+function exportCSV() {
+  if (!completed.length) { alert('No completed trips to export.'); return; }
+  const rows = [['Plate','Trip Type','Entry Time','Exit Time','Wait (min)']];
+  completed.forEach(c => rows.push([
+    c.plate,
+    c.trip_type || '',
+    c.entry_ts ? new Date(c.entry_ts).toISOString() : '',
+    c.exit_ts ? new Date(c.exit_ts).toISOString() : '',
+    c.wait_minutes != null ? c.wait_minutes : ''
+  ]));
+  const csv = rows.map(r => r.map(x => '"' + String(x).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'premier_lot_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+// Realtime
+db.channel('lot_log_changes')
+  .on('postgres_changes', {event:'*', schema:'public', table:'lot_log'}, () => fetchData())
+  .subscribe(status => {
+    if (status === 'SUBSCRIBED') setStatus('live', 'Live · Supabase realtime');
+    else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setStatus('err', 'Realtime disconnected');
+  });
+
+fetchData();
+</script>
+</body>
+</html>
