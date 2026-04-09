@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Premier Lot — Driver</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede8;
+    --text: #1a1a1a; --text2: #6b6b6b;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --green: #0f6e56; --green-bg: #e1f5ee; --green-light: #1d9e75;
+    --red: #a32d2d; --red-bg: #fcebeb;
+    --amber: #ba7517; --amber-bg: #faeeda;
+    --blue: #185fa5; --blue-bg: #e6f1fb;
+    --radius: 10px; --radius-lg: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1c; --bg2: #262626; --bg3: #2f2f2f;
+      --text: #f0f0f0; --text2: #9a9a9a;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --green-bg: #0a3328; --red-bg: #3a1515;
+      --amber-bg: #2e1e04; --blue-bg: #0c1e36;
+    }
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg3); color: var(--text);
+    min-height: 100vh; padding: 1.5rem 1rem 4rem;
+    max-width: 420px; margin: 0 auto;
+  }
+
+  /* ── Setup screen ── */
+  #setupScreen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 1.5rem; text-align: center; }
+  #setupScreen.visible { display: flex; }
+  .setup-icon { font-size: 48px; line-height: 1; }
+  .setup-title { font-size: 22px; font-weight: 700; }
+  .setup-sub { font-size: 14px; color: var(--text2); line-height: 1.5; }
+  .setup-input-wrap { width: 100%; }
+  .setup-input-wrap input {
+    width: 100%; height: 52px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-size: 22px; font-weight: 700;
+    padding: 0 16px; outline: none; letter-spacing: .1em; text-align: center; text-transform: uppercase;
+  }
+  .setup-input-wrap input:focus { border-color: var(--green); }
+  .setup-input-wrap input::placeholder { font-size: 16px; font-weight: 400; letter-spacing: 0; color: var(--text2); }
+  .btn-setup { width: 100%; height: 52px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 17px; font-weight: 600; cursor: pointer; }
+  .btn-setup:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Main screen ── */
+  #mainScreen { display: none; flex-direction: column; gap: 1rem; }
+  #mainScreen.visible { display: flex; }
+
+  .plate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+  .plate-display { font-size: 28px; font-weight: 800; letter-spacing: .1em; }
+  .btn-change { font-size: 12px; color: var(--text2); background: transparent; border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 4px 10px; cursor: pointer; }
+  .btn-change:hover { background: var(--bg2); }
+
+  /* Status card */
+  .status-card {
+    background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem;
+    border: 0.5px solid var(--border); text-align: center;
+  }
+  .status-card.in-lot { border-color: var(--green-light); background: var(--green-bg); }
+  .status-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: .5rem; }
+  .status-card.in-lot .status-label { color: var(--green); }
+  .status-time { font-size: 36px; font-weight: 700; margin-bottom: .25rem; }
+  .status-sub { font-size: 13px; color: var(--text2); }
+  .status-card.in-lot .status-sub { color: var(--green); }
+
+  /* Action button */
+  .btn-action {
+    width: 100%; height: 60px; border: none; border-radius: var(--radius-lg);
+    font-size: 18px; font-weight: 700; cursor: pointer; letter-spacing: .01em;
+  }
+  .btn-action:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-checkin { background: var(--green); color: #fff; }
+  .btn-checkin:hover:not(:disabled) { opacity: .9; }
+  .btn-checkout { background: var(--text); color: var(--bg); }
+  .btn-checkout:hover:not(:disabled) { opacity: .85; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-card { background: var(--bg); border-radius: var(--radius); padding: 1rem; border: 0.5px solid var(--border); text-align: center; }
+  .stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .stat-val { font-size: 26px; font-weight: 700; }
+
+  /* Trip type sheet */
+  .sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: flex-end; justify-content: center; }
+  .sheet-overlay.open { display: flex; }
+  .sheet { background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 1.25rem 1.25rem 2rem; width: 100%; max-width: 420px; }
+  .sheet-handle { width: 40px; height: 4px; background: var(--border2); border-radius: 99px; margin: 0 auto 1.25rem; }
+  .sheet h3 { font-size: 17px; font-weight: 700; margin-bottom: .375rem; }
+  .sheet-plate { font-size: 20px; font-weight: 800; letter-spacing: .08em; margin-bottom: 1rem; }
+  .sheet-sub { font-size: 13px; color: var(--text2); margin-bottom: 1rem; }
+  .trip-opts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.25rem; }
+  .trip-opt { padding: 14px 16px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 16px; font-weight: 500; }
+  .trip-opt:hover { background: var(--bg2); }
+  .trip-opt.sel { background: var(--bg2); border-color: var(--green); }
+  .trip-opt.muted { color: var(--text2); font-weight: 400; }
+  .btn-confirm-sheet { width: 100%; height: 52px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 17px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+  .btn-confirm-sheet:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-cancel-sheet { width: 100%; height: 44px; background: transparent; border: 0.5px solid var(--border2); color: var(--text2); border-radius: var(--radius); font-size: 15px; cursor: pointer; }
+
+  /* History */
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .75rem; }
+  .history-list { display: flex; flex-direction: column; gap: 8px; }
+  .history-item { background: var(--bg); border-radius: var(--radius); padding: 12px 14px; border: 0.5px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .history-date { font-size: 12px; color: var(--text2); min-width: 60px; }
+  .history-body { flex: 1; }
+  .history-type { font-size: 14px; font-weight: 600; }
+  .history-time { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .history-wait { font-size: 14px; font-weight: 700; text-align: right; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600; display: inline-block; margin-top: 3px; }
+  .pill-premier { background: var(--green-bg); color: var(--green); }
+  .pill-xl { background: var(--blue-bg); color: var(--blue); }
+  .pill-comfort { background: var(--amber-bg); color: var(--amber); }
+  .pill-x { background: var(--bg2); color: var(--text2); }
+  .pill-nd { background: var(--red-bg); color: var(--red); }
+
+  .err-banner { background: var(--red-bg); border: 0.5px solid #f09595; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: .5rem; }
+  .empty { font-size: 13px; color: var(--text2); text-align: center; padding: 1.5rem 0; }
+  .timer-live { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<!-- Setup screen -->
+<div id="setupScreen">
+  <div class="setup-icon">🚗</div>
+  <div class="setup-title">Premier Lot Check-In</div>
+  <p class="setup-sub">Enter your license plate once.<br>We'll remember it for next time.</p>
+  <div class="setup-input-wrap">
+    <input id="setupPlate" type="text" placeholder="License plate" maxlength="10"
+      oninput="this.value=this.value.toUpperCase()"
+      onkeydown="if(event.key==='Enter')savePlate()" />
+  </div>
+  <button class="btn-setup" onclick="savePlate()">Save my plate</button>
+</div>
+
+<!-- Main screen -->
+<div id="mainScreen">
+  <div id="errBanner" class="err-banner" style="display:none"></div>
+
+  <div class="plate-header">
+    <div class="plate-display" id="plateDisplay">—</div>
+    <button class="btn-change" onclick="changePlate()">Change plate</button>
+  </div>
+
+  <!-- Status card -->
+  <div class="status-card" id="statusCard">
+    <div class="status-label" id="statusLabel">Not checked in</div>
+    <div class="status-time timer-live" id="statusTime">—</div>
+    <div class="status-sub" id="statusSub">Tap below to check in when you arrive</div>
+  </div>
+
+  <!-- Action button -->
+  <button class="btn-action btn-checkin" id="actionBtn" onclick="handleAction()">Check in to lot</button>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total trips</div>
+      <div class="stat-val" id="statTrips">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg wait</div>
+      <div class="stat-val" id="statAvg">—</div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div>
+    <div class="section-title">My trip history</div>
+    <div class="history-list" id="historyList"><div class="empty">No trips logged yet</div></div>
+  </div>
+</div>
+
+<!-- Trip type bottom sheet -->
+<div class="sheet-overlay" id="tripSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Check out</h3>
+    <div class="sheet-plate" id="sheetPlate">—</div>
+    <div class="sheet-sub">What trip were you dispatched on?</div>
+    <div class="trip-opts" id="sheetTripOpts"></div>
+    <button class="btn-confirm-sheet" id="sheetConfirmBtn" onclick="confirmCheckout()">Confirm check out</button>
+    <button class="btn-cancel-sheet" onclick="closeSheet()">Cancel</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://icohyfoyedgbqxumataj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imljb2h5Zm95ZWRnYnF4dW1hdGFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzQ4MTcsImV4cCI6MjA5MTI1MDgxN30.3qG3oEsg687uZ9ZVL-g5xeqNl4XTQeQhe55Wz2fjqmk';
+const TRIP_TYPES = ['Uber Premier','Uber XL','Uber Comfort','UberX','Not dispatched'];
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let myPlate = localStorage.getItem('driverPlate') || null;
+let currentEntry = null;
+let myTrips = [];
+let selectedTrip = TRIP_TYPES[0];
+let busy = false;
+let timerInterval = null;
+
+// ── Init ──────────────────────────────────────────────────────
+function init() {
+  if (!myPlate) {
+    document.getElementById('setupScreen').classList.add('visible');
+  } else {
+    showMain();
+  }
+}
+
+function showMain() {
+  document.getElementById('setupScreen').classList.remove('visible');
+  document.getElementById('mainScreen').classList.add('visible');
+  document.getElementById('plateDisplay').textContent = myPlate;
+  document.getElementById('sheetPlate').textContent = myPlate;
+  fetchMyData();
+}
+
+function savePlate() {
+  const val = document.getElementById('setupPlate').value.trim().toUpperCase();
+  if (!val) return;
+  myPlate = val;
+  localStorage.setItem('driverPlate', myPlate);
+  showMain();
+}
+
+function changePlate() {
+  if (!confirm('Change your saved plate? You will need to re-enter it.')) return;
+  localStorage.removeItem('driverPlate');
+  myPlate = null;
+  currentEntry = null;
+  clearInterval(timerInterval);
+  document.getElementById('mainScreen').classList.remove('visible');
+  document.getElementById('setupPlate').value = '';
+  document.getElementById('setupScreen').classList.add('visible');
+}
+
+// ── Data ──────────────────────────────────────────────────────
+function showErr(msg) {
+  const b = document.getElementById('errBanner');
+  b.textContent = msg; b.style.display = 'block';
+  setTimeout(()=>b.style.display='none', 5000);
+}
+
+async function fetchMyData() {
+  const { data, error } = await db
+    .from('lot_log')
+    .select('*')
+    .eq('plate', myPlate)
+    .order('entry_ts', {ascending: false});
+  if (error) { showErr('Could not load data: ' + error.message); return; }
+
+  // Check if currently in lot
+  currentEntry = data.find(r => r.status === 'in_lot') || null;
+  myTrips = data.filter(r => r.status === 'exited');
+
+  renderStatus();
+  renderStats();
+  renderHistory();
+}
+
+// ── Status card & timer ───────────────────────────────────────
+function renderStatus() {
+  const card = document.getElementById('statusCard');
+  const label = document.getElementById('statusLabel');
+  const timEl = document.getElementById('statusTime');
+  const sub = document.getElementById('statusSub');
+  const btn = document.getElementById('actionBtn');
+
+  clearInterval(timerInterval);
+
+  if (currentEntry) {
+    card.classList.add('in-lot');
+    label.textContent = 'In lot since';
+    sub.textContent = 'Tap below when you receive a trip';
+    btn.className = 'btn-action btn-checkout';
+    btn.textContent = 'Check out';
+
+    function tick() {
+      const diff = Date.now() - new Date(currentEntry.entry_ts).getTime();
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      timEl.textContent = mins + ':' + String(secs).padStart(2,'0');
+    }
+    tick();
+    timerInterval = setInterval(tick, 1000);
+  } else {
+    card.classList.remove('in-lot');
+    label.textContent = 'Not checked in';
+    timEl.textContent = '—';
+    sub.textContent = 'Tap below when you arrive at the lot';
+    btn.className = 'btn-action btn-checkin';
+    btn.textContent = 'Check in to lot';
+  }
+}
+
+function renderStats() {
+  document.getElementById('statTrips').textContent = myTrips.length || '0';
+  if (myTrips.length) {
+    const avg = myTrips.reduce((s,c)=>s+(c.wait_minutes||0),0)/myTrips.length;
+    document.getElementById('statAvg').textContent = Math.round(avg)+'m';
+  } else {
+    document.getElementById('statAvg').textContent = '—';
+  }
+}
+
+function pillClass(t) {
+  if (!t) return 'pill-x';
+  if (t==='Uber Premier') return 'pill-premier';
+  if (t==='Uber XL') return 'pill-xl';
+  if (t==='Uber Comfort') return 'pill-comfort';
+  if (t==='UberX') return 'pill-x';
+  return 'pill-nd';
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!myTrips.length) { el.innerHTML='<div class="empty">No trips logged yet</div>'; return; }
+  el.innerHTML = myTrips.slice(0,30).map(c=>{
+    const d = new Date(c.exit_ts);
+    const dateStr = d.toLocaleDateString([],{month:'short',day:'numeric'});
+    const timeStr = d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return `<div class="history-item">
+      <div class="history-date">${dateStr}</div>
+      <div class="history-body">
+        <div class="history-type">${c.trip_type||'Unknown'}</div>
+        <div class="history-time">${timeStr}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="history-wait">${c.wait_minutes!=null?c.wait_minutes+'m':'—'}</div>
+        <span class="pill ${pillClass(c.trip_type)}">${c.trip_type||'—'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Check in / out ────────────────────────────────────────────
+async function handleAction() {
+  if (busy) return;
+  if (currentEntry) {
+    openSheet();
+  } else {
+    await checkIn();
+  }
+}
+
+async function checkIn() {
+  busy = true;
+  document.getElementById('actionBtn').disabled = true;
+  const { error } = await db.from('lot_log').insert([{
+    plate: myPlate,
+    status: 'in_lot',
+    entry_ts: new Date().toISOString()
+  }]);
+  busy = false;
+  document.getElementById('actionBtn').disabled = false;
+  if (error) { showErr('Check-in failed: ' + error.message); return; }
+  await fetchMyData();
+}
+
+function openSheet() {
+  selectedTrip = TRIP_TYPES[0];
+  renderSheetOpts();
+  document.getElementById('tripSheet').classList.add('open');
+}
+function closeSheet() { document.getElementById('tripSheet').classList.remove('open'); }
+
+function renderSheetOpts() {
+  document.getElementById('sheetTripOpts').innerHTML = TRIP_TYPES.map(t=>
+    `<div class="trip-opt${t===selectedTrip?' sel':''}${t==='Not dispatched'?' muted':''}" onclick="selectSheetTrip('${t}')">${t}</div>`
+  ).join('');
+}
+function selectSheetTrip(t) { selectedTrip=t; renderSheetOpts(); }
+
+async function confirmCheckout() {
+  if (!currentEntry || busy) return;
+  busy = true;
+  document.getElementById('sheetConfirmBtn').disabled = true;
+  const exitTs = new Date();
+  const waitMins = Math.round((exitTs - new Date(currentEntry.entry_ts)) / 60000);
+  const { error } = await db.from('lot_log').update({
+    status: 'exited',
+    trip_type: selectedTrip,
+    exit_ts: exitTs.toISOString(),
+    wait_minutes: waitMins
+  }).eq('id', currentEntry.id);
+  busy = false;
+  document.getElementById('sheetConfirmBtn').disabled = false;
+  if (error) { showErr('Check-out failed: ' + error.message); return; }
+  closeSheet();
+  await fetchMyData();
+}
+
+// ── Realtime ──────────────────────────────────────────────────
+db.channel('driver_lot_changes')
+  .on('postgres_changes', {event:'*', schema:'public', table:'lot_log'}, payload => {
+    if (payload.new && payload.new.plate === myPlate) fetchMyData();
+    if (payload.old && payload.old.plate === myPlate) fetchMyData();
+  })
+  .subscribe();
+
+init();
+</script>
+</body>
+</html>
