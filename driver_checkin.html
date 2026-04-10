@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Premier Lot — Driver</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>WheelWise — Lot Check-In</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0f6e56" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="WheelWise" />
+
+<!-- iOS home screen icons — generated from SVG data URI -->
+<link rel="apple-touch-icon" href="icon-192.png" />
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,6 +28,8 @@
     --amber: #ba7517; --amber-bg: #faeeda;
     --blue: #185fa5; --blue-bg: #e6f1fb;
     --radius: 10px; --radius-lg: 16px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -26,94 +40,158 @@
       --amber-bg: #2e1e04; --blue-bg: #0c1e36;
     }
   }
+  html { height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg3); color: var(--text);
-    min-height: 100vh; padding: 1.5rem 1rem 4rem;
-    max-width: 420px; margin: 0 auto;
+    background: var(--bg3);
+    color: var(--text);
+    min-height: 100%;
+    padding: calc(var(--safe-top) + 1.5rem) 1rem calc(var(--safe-bottom) + 4rem);
+    max-width: 420px;
+    margin: 0 auto;
   }
+
+  /* Install banner */
+  #installBanner {
+    display: none;
+    background: var(--green);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 1rem;
+    font-size: 13px;
+    align-items: center;
+    gap: 10px;
+  }
+  #installBanner.show { display: flex; }
+  #installBanner span { flex: 1; line-height: 1.4; }
+  .btn-install {
+    background: #fff;
+    color: var(--green);
+    border: none;
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #dismissBanner {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  /* Offline indicator */
+  #offlineBanner {
+    display: none;
+    background: var(--amber-bg);
+    border: 0.5px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--amber);
+    margin-bottom: .75rem;
+    text-align: center;
+  }
+  #offlineBanner.show { display: block; }
 
   /* ── Setup screen ── */
   #setupScreen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; gap: 1.5rem; text-align: center; }
   #setupScreen.visible { display: flex; }
-  .setup-icon { font-size: 48px; line-height: 1; }
-  .setup-title { font-size: 22px; font-weight: 700; }
-  .setup-sub { font-size: 14px; color: var(--text2); line-height: 1.5; }
+  .setup-logo { width: 72px; height: 72px; border-radius: 18px; background: var(--green); display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+  .setup-logo svg { width: 40px; height: 40px; }
+  .setup-title { font-size: 24px; font-weight: 700; }
+  .setup-sub { font-size: 14px; color: var(--text2); line-height: 1.5; max-width: 280px; }
   .setup-input-wrap { width: 100%; }
   .setup-input-wrap input {
-    width: 100%; height: 52px; border: 0.5px solid var(--border2); border-radius: var(--radius);
-    background: var(--bg); color: var(--text); font-size: 22px; font-weight: 700;
+    width: 100%; height: 56px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    background: var(--bg); color: var(--text); font-size: 24px; font-weight: 700;
     padding: 0 16px; outline: none; letter-spacing: .1em; text-align: center; text-transform: uppercase;
   }
   .setup-input-wrap input:focus { border-color: var(--green); }
   .setup-input-wrap input::placeholder { font-size: 16px; font-weight: 400; letter-spacing: 0; color: var(--text2); }
-  .btn-setup { width: 100%; height: 52px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 17px; font-weight: 600; cursor: pointer; }
+  .btn-setup { width: 100%; height: 56px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 18px; font-weight: 700; cursor: pointer; }
   .btn-setup:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-setup:active { opacity: .85; }
 
   /* ── Main screen ── */
   #mainScreen { display: none; flex-direction: column; gap: 1rem; }
   #mainScreen.visible { display: flex; }
 
-  .plate-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
-  .plate-display { font-size: 28px; font-weight: 800; letter-spacing: .1em; }
-  .btn-change { font-size: 12px; color: var(--text2); background: transparent; border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 4px 10px; cursor: pointer; }
-  .btn-change:hover { background: var(--bg2); }
+  /* App header */
+  .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+  .app-wordmark { font-size: 13px; font-weight: 700; color: var(--green); letter-spacing: .04em; }
+  .plate-display { font-size: 26px; font-weight: 800; letter-spacing: .1em; }
+  .btn-change { font-size: 12px; color: var(--text2); background: transparent; border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 5px 12px; cursor: pointer; }
+  .btn-change:active { background: var(--bg2); }
 
   /* Status card */
   .status-card {
     background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem;
-    border: 0.5px solid var(--border); text-align: center;
+    border: 0.5px solid var(--border); text-align: center; transition: background .3s, border-color .3s;
   }
   .status-card.in-lot { border-color: var(--green-light); background: var(--green-bg); }
-  .status-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: .5rem; }
+  .status-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text2); margin-bottom: .5rem; }
   .status-card.in-lot .status-label { color: var(--green); }
-  .status-time { font-size: 36px; font-weight: 700; margin-bottom: .25rem; }
+  .status-time { font-size: 42px; font-weight: 800; margin-bottom: .25rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .status-sub { font-size: 13px; color: var(--text2); }
   .status-card.in-lot .status-sub { color: var(--green); }
 
   /* Action button */
   .btn-action {
-    width: 100%; height: 60px; border: none; border-radius: var(--radius-lg);
-    font-size: 18px; font-weight: 700; cursor: pointer; letter-spacing: .01em;
+    width: 100%; height: 64px; border: none; border-radius: var(--radius-lg);
+    font-size: 19px; font-weight: 800; cursor: pointer; letter-spacing: .01em;
+    transition: opacity .15s, transform .1s;
   }
+  .btn-action:active { transform: scale(0.98); opacity: .9; }
   .btn-action:disabled { opacity: .45; cursor: not-allowed; }
   .btn-checkin { background: var(--green); color: #fff; }
-  .btn-checkin:hover:not(:disabled) { opacity: .9; }
   .btn-checkout { background: var(--text); color: var(--bg); }
-  .btn-checkout:hover:not(:disabled) { opacity: .85; }
 
   /* Stats row */
   .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat-card { background: var(--bg); border-radius: var(--radius); padding: 1rem; border: 0.5px solid var(--border); text-align: center; }
   .stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
-  .stat-val { font-size: 26px; font-weight: 700; }
+  .stat-val { font-size: 28px; font-weight: 800; }
 
-  /* Trip type sheet */
-  .sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: flex-end; justify-content: center; }
+  /* Trip type bottom sheet */
+  .sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: flex-end; justify-content: center; }
   .sheet-overlay.open { display: flex; }
-  .sheet { background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 1.25rem 1.25rem 2rem; width: 100%; max-width: 420px; }
+  .sheet {
+    background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 1.25rem 1.25rem calc(var(--safe-bottom) + 1.5rem);
+    width: 100%; max-width: 420px;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .sheet-handle { width: 40px; height: 4px; background: var(--border2); border-radius: 99px; margin: 0 auto 1.25rem; }
-  .sheet h3 { font-size: 17px; font-weight: 700; margin-bottom: .375rem; }
-  .sheet-plate { font-size: 20px; font-weight: 800; letter-spacing: .08em; margin-bottom: 1rem; }
+  .sheet h3 { font-size: 18px; font-weight: 700; margin-bottom: .375rem; }
+  .sheet-plate { font-size: 22px; font-weight: 800; letter-spacing: .08em; margin-bottom: 1rem; }
   .sheet-sub { font-size: 13px; color: var(--text2); margin-bottom: 1rem; }
   .trip-opts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.25rem; }
-  .trip-opt { padding: 14px 16px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 16px; font-weight: 500; }
-  .trip-opt:hover { background: var(--bg2); }
-  .trip-opt.sel { background: var(--bg2); border-color: var(--green); }
+  .trip-opt { padding: 14px 16px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 16px; font-weight: 500; transition: background .1s; -webkit-tap-highlight-color: transparent; }
+  .trip-opt:active { background: var(--bg2); }
+  .trip-opt.sel { background: var(--bg2); border-color: var(--green); font-weight: 700; }
   .trip-opt.muted { color: var(--text2); font-weight: 400; }
-  .btn-confirm-sheet { width: 100%; height: 52px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 17px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+  .btn-confirm-sheet { width: 100%; height: 56px; background: var(--green); color: #fff; border: none; border-radius: var(--radius); font-size: 18px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
   .btn-confirm-sheet:disabled { opacity: .45; cursor: not-allowed; }
-  .btn-cancel-sheet { width: 100%; height: 44px; background: transparent; border: 0.5px solid var(--border2); color: var(--text2); border-radius: var(--radius); font-size: 15px; cursor: pointer; }
+  .btn-confirm-sheet:active { opacity: .85; }
+  .btn-cancel-sheet { width: 100%; height: 48px; background: transparent; border: 0.5px solid var(--border2); color: var(--text2); border-radius: var(--radius); font-size: 16px; cursor: pointer; }
 
   /* History */
-  .section-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .75rem; }
+  .section-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .75rem; }
   .history-list { display: flex; flex-direction: column; gap: 8px; }
   .history-item { background: var(--bg); border-radius: var(--radius); padding: 12px 14px; border: 0.5px solid var(--border); display: flex; align-items: center; gap: 12px; }
-  .history-date { font-size: 12px; color: var(--text2); min-width: 60px; }
+  .history-date { font-size: 12px; color: var(--text2); min-width: 58px; }
   .history-body { flex: 1; }
   .history-type { font-size: 14px; font-weight: 600; }
   .history-time { font-size: 12px; color: var(--text2); margin-top: 2px; }
-  .history-wait { font-size: 14px; font-weight: 700; text-align: right; }
+  .history-wait { font-size: 15px; font-weight: 800; text-align: right; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600; display: inline-block; margin-top: 3px; }
   .pill-premier { background: var(--green-bg); color: var(--green); }
   .pill-xl { background: var(--blue-bg); color: var(--blue); }
@@ -123,20 +201,35 @@
 
   .err-banner { background: var(--red-bg); border: 0.5px solid #f09595; border-radius: var(--radius); padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: .5rem; }
   .empty { font-size: 13px; color: var(--text2); text-align: center; padding: 1.5rem 0; }
-  .timer-live { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
 
+<!-- Install prompt banner (Android / desktop) -->
+<div id="installBanner">
+  <span>Add WheelWise to your home screen for the best experience</span>
+  <button class="btn-install" id="installBtn">Install</button>
+  <button id="dismissBanner">✕</button>
+</div>
+
+<!-- Offline indicator -->
+<div id="offlineBanner">You are offline — check-ins will sync when connection is restored</div>
+
 <!-- Setup screen -->
 <div id="setupScreen">
-  <div class="setup-icon">🚗</div>
-  <div class="setup-title">Premier Lot Check-In</div>
-  <p class="setup-sub">Enter your license plate once.<br>We'll remember it for next time.</p>
+  <div class="setup-logo">
+    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="20" r="16" stroke="white" stroke-width="2.5"/>
+      <path d="M12 20h16M20 12v16" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="4" fill="white"/>
+    </svg>
+  </div>
+  <div class="setup-title">WheelWise</div>
+  <p class="setup-sub">Enter your license plate once. We'll remember it for every visit.</p>
   <div class="setup-input-wrap">
     <input id="setupPlate" type="text" placeholder="License plate" maxlength="10"
       oninput="this.value=this.value.toUpperCase()"
-      onkeydown="if(event.key==='Enter')savePlate()" />
+      onkeydown="if(event.key==='Enter')savePlate()" autocomplete="off" />
   </div>
   <button class="btn-setup" onclick="savePlate()">Save my plate</button>
 </div>
@@ -145,22 +238,21 @@
 <div id="mainScreen">
   <div id="errBanner" class="err-banner" style="display:none"></div>
 
-  <div class="plate-header">
-    <div class="plate-display" id="plateDisplay">—</div>
+  <div class="app-header">
+    <span class="app-wordmark">WHEELWISE</span>
     <button class="btn-change" onclick="changePlate()">Change plate</button>
   </div>
 
-  <!-- Status card -->
+  <div class="plate-display" id="plateDisplay">—</div>
+
   <div class="status-card" id="statusCard">
     <div class="status-label" id="statusLabel">Not checked in</div>
-    <div class="status-time timer-live" id="statusTime">—</div>
-    <div class="status-sub" id="statusSub">Tap below to check in when you arrive</div>
+    <div class="status-time" id="statusTime">—</div>
+    <div class="status-sub" id="statusSub">Tap below when you arrive at the lot</div>
   </div>
 
-  <!-- Action button -->
   <button class="btn-action btn-checkin" id="actionBtn" onclick="handleAction()">Check in to lot</button>
 
-  <!-- Stats -->
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-label">Total trips</div>
@@ -172,14 +264,13 @@
     </div>
   </div>
 
-  <!-- History -->
   <div>
     <div class="section-title">My trip history</div>
     <div class="history-list" id="historyList"><div class="empty">No trips logged yet</div></div>
   </div>
 </div>
 
-<!-- Trip type bottom sheet -->
+<!-- Trip type sheet -->
 <div class="sheet-overlay" id="tripSheet">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -206,6 +297,46 @@ let myTrips = [];
 let selectedTrip = TRIP_TYPES[0];
 let busy = false;
 let timerInterval = null;
+let deferredInstallPrompt = null;
+
+// ── PWA Service Worker ────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.log('SW failed:', err));
+  });
+}
+
+// ── PWA Install prompt (Android / desktop) ────────────────────
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if (!localStorage.getItem('installDismissed')) {
+    document.getElementById('installBanner').classList.add('show');
+  }
+});
+
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') document.getElementById('installBanner').classList.remove('show');
+  deferredInstallPrompt = null;
+});
+
+document.getElementById('dismissBanner').addEventListener('click', () => {
+  document.getElementById('installBanner').classList.remove('show');
+  localStorage.setItem('installDismissed', '1');
+});
+
+// ── Offline detection ─────────────────────────────────────────
+function updateOnlineStatus() {
+  document.getElementById('offlineBanner').classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
@@ -233,10 +364,9 @@ function savePlate() {
 }
 
 function changePlate() {
-  if (!confirm('Change your saved plate? You will need to re-enter it.')) return;
+  if (!confirm('Change your saved plate?')) return;
   localStorage.removeItem('driverPlate');
-  myPlate = null;
-  currentEntry = null;
+  myPlate = null; currentEntry = null;
   clearInterval(timerInterval);
   document.getElementById('mainScreen').classList.remove('visible');
   document.getElementById('setupPlate').value = '';
@@ -247,34 +377,27 @@ function changePlate() {
 function showErr(msg) {
   const b = document.getElementById('errBanner');
   b.textContent = msg; b.style.display = 'block';
-  setTimeout(()=>b.style.display='none', 5000);
+  setTimeout(() => b.style.display = 'none', 5000);
 }
 
 async function fetchMyData() {
+  if (!navigator.onLine) return;
   const { data, error } = await db
-    .from('lot_log')
-    .select('*')
-    .eq('plate', myPlate)
-    .order('entry_ts', {ascending: false});
+    .from('lot_log').select('*').eq('plate', myPlate)
+    .order('entry_ts', { ascending: false });
   if (error) { showErr('Could not load data: ' + error.message); return; }
-
-  // Check if currently in lot
   currentEntry = data.find(r => r.status === 'in_lot') || null;
   myTrips = data.filter(r => r.status === 'exited');
-
-  renderStatus();
-  renderStats();
-  renderHistory();
+  renderStatus(); renderStats(); renderHistory();
 }
 
-// ── Status card & timer ───────────────────────────────────────
+// ── Status & timer ────────────────────────────────────────────
 function renderStatus() {
   const card = document.getElementById('statusCard');
   const label = document.getElementById('statusLabel');
   const timEl = document.getElementById('statusTime');
   const sub = document.getElementById('statusSub');
   const btn = document.getElementById('actionBtn');
-
   clearInterval(timerInterval);
 
   if (currentEntry) {
@@ -283,12 +406,11 @@ function renderStatus() {
     sub.textContent = 'Tap below when you receive a trip';
     btn.className = 'btn-action btn-checkout';
     btn.textContent = 'Check out';
-
     function tick() {
       const diff = Date.now() - new Date(currentEntry.entry_ts).getTime();
       const mins = Math.floor(diff / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      timEl.textContent = mins + ':' + String(secs).padStart(2,'0');
+      timEl.textContent = mins + ':' + String(secs).padStart(2, '0');
     }
     tick();
     timerInterval = setInterval(tick, 1000);
@@ -305,38 +427,34 @@ function renderStatus() {
 function renderStats() {
   document.getElementById('statTrips').textContent = myTrips.length || '0';
   if (myTrips.length) {
-    const avg = myTrips.reduce((s,c)=>s+(c.wait_minutes||0),0)/myTrips.length;
-    document.getElementById('statAvg').textContent = Math.round(avg)+'m';
-  } else {
-    document.getElementById('statAvg').textContent = '—';
-  }
+    const avg = myTrips.reduce((s, c) => s + (c.wait_minutes || 0), 0) / myTrips.length;
+    document.getElementById('statAvg').textContent = Math.round(avg) + 'm';
+  } else document.getElementById('statAvg').textContent = '—';
 }
 
 function pillClass(t) {
   if (!t) return 'pill-x';
-  if (t==='Uber Premier') return 'pill-premier';
-  if (t==='Uber XL') return 'pill-xl';
-  if (t==='Uber Comfort') return 'pill-comfort';
-  if (t==='UberX') return 'pill-x';
+  if (t === 'Uber Premier') return 'pill-premier';
+  if (t === 'Uber XL') return 'pill-xl';
+  if (t === 'Uber Comfort') return 'pill-comfort';
+  if (t === 'UberX') return 'pill-x';
   return 'pill-nd';
 }
 
 function renderHistory() {
   const el = document.getElementById('historyList');
-  if (!myTrips.length) { el.innerHTML='<div class="empty">No trips logged yet</div>'; return; }
-  el.innerHTML = myTrips.slice(0,30).map(c=>{
+  if (!myTrips.length) { el.innerHTML = '<div class="empty">No trips logged yet</div>'; return; }
+  el.innerHTML = myTrips.slice(0, 30).map(c => {
     const d = new Date(c.exit_ts);
-    const dateStr = d.toLocaleDateString([],{month:'short',day:'numeric'});
-    const timeStr = d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     return `<div class="history-item">
-      <div class="history-date">${dateStr}</div>
+      <div class="history-date">${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
       <div class="history-body">
-        <div class="history-type">${c.trip_type||'Unknown'}</div>
-        <div class="history-time">${timeStr}</div>
+        <div class="history-type">${c.trip_type || 'Unknown'}</div>
+        <div class="history-time">${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
       <div style="text-align:right">
-        <div class="history-wait">${c.wait_minutes!=null?c.wait_minutes+'m':'—'}</div>
-        <span class="pill ${pillClass(c.trip_type)}">${c.trip_type||'—'}</span>
+        <div class="history-wait">${c.wait_minutes != null ? c.wait_minutes + 'm' : '—'}</div>
+        <span class="pill ${pillClass(c.trip_type)}">${c.trip_type || '—'}</span>
       </div>
     </div>`;
   }).join('');
@@ -345,20 +463,15 @@ function renderHistory() {
 // ── Check in / out ────────────────────────────────────────────
 async function handleAction() {
   if (busy) return;
-  if (currentEntry) {
-    openSheet();
-  } else {
-    await checkIn();
-  }
+  if (currentEntry) { openSheet(); } else { await checkIn(); }
 }
 
 async function checkIn() {
+  if (!navigator.onLine) { showErr('You are offline — please check in when connected.'); return; }
   busy = true;
   document.getElementById('actionBtn').disabled = true;
   const { error } = await db.from('lot_log').insert([{
-    plate: myPlate,
-    status: 'in_lot',
-    entry_ts: new Date().toISOString()
+    plate: myPlate, status: 'in_lot', entry_ts: new Date().toISOString()
   }]);
   busy = false;
   document.getElementById('actionBtn').disabled = false;
@@ -374,23 +487,22 @@ function openSheet() {
 function closeSheet() { document.getElementById('tripSheet').classList.remove('open'); }
 
 function renderSheetOpts() {
-  document.getElementById('sheetTripOpts').innerHTML = TRIP_TYPES.map(t=>
-    `<div class="trip-opt${t===selectedTrip?' sel':''}${t==='Not dispatched'?' muted':''}" onclick="selectSheetTrip('${t}')">${t}</div>`
+  document.getElementById('sheetTripOpts').innerHTML = TRIP_TYPES.map(t =>
+    `<div class="trip-opt${t === selectedTrip ? ' sel' : ''}${t === 'Not dispatched' ? ' muted' : ''}" onclick="selectSheetTrip('${t}')">${t}</div>`
   ).join('');
 }
-function selectSheetTrip(t) { selectedTrip=t; renderSheetOpts(); }
+function selectSheetTrip(t) { selectedTrip = t; renderSheetOpts(); }
 
 async function confirmCheckout() {
   if (!currentEntry || busy) return;
+  if (!navigator.onLine) { showErr('You are offline — please check out when connected.'); return; }
   busy = true;
   document.getElementById('sheetConfirmBtn').disabled = true;
   const exitTs = new Date();
   const waitMins = Math.round((exitTs - new Date(currentEntry.entry_ts)) / 60000);
   const { error } = await db.from('lot_log').update({
-    status: 'exited',
-    trip_type: selectedTrip,
-    exit_ts: exitTs.toISOString(),
-    wait_minutes: waitMins
+    status: 'exited', trip_type: selectedTrip,
+    exit_ts: exitTs.toISOString(), wait_minutes: waitMins
   }).eq('id', currentEntry.id);
   busy = false;
   document.getElementById('sheetConfirmBtn').disabled = false;
@@ -401,9 +513,9 @@ async function confirmCheckout() {
 
 // ── Realtime ──────────────────────────────────────────────────
 db.channel('driver_lot_changes')
-  .on('postgres_changes', {event:'*', schema:'public', table:'lot_log'}, payload => {
-    if (payload.new && payload.new.plate === myPlate) fetchMyData();
-    if (payload.old && payload.old.plate === myPlate) fetchMyData();
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'lot_log' }, payload => {
+    if ((payload.new && payload.new.plate === myPlate) ||
+        (payload.old && payload.old.plate === myPlate)) fetchMyData();
   })
   .subscribe();
 
